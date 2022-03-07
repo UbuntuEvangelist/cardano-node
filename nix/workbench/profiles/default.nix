@@ -15,7 +15,7 @@
 
 let
   baseJSON = runWorkbenchJqOnly "profile-${profileName}.json"
-                          "profile get ${profileName}";
+    "profile json-by-name ${profileName}";
   JSON =
     if profileOverride == {}
     then baseJSON

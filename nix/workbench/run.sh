@@ -235,39 +235,46 @@ case "$op" in
     allocate )
         local usage="USAGE: wb run $op BATCH-NAME PROFILE-NAME [ENV-CONFIG-OPTS..] [-- BACKEND-ARGS-AND-ENV-CONFIG-OPTS..]"
         local batch=${1:?$usage}; shift
-        local  prof=${1:?$usage}; shift
+        local profile_name=${1:?$usage}; shift
 
-        local cacheDir=$default_cacheDir basePort=$default_basePort staggerPorts='false'
+        local cacheDir=$default_cacheDir basePort=$default_basePort staggerPorts='false' profile=
         while test $# -gt 0
         do case "$1" in
-               --profile )       profile=$2; shift;;
-               --cache-dir )     cacheDir=$2; shift;;
-               --base-port )     basePort=$2; shift;;
-               --stagger-ports ) staggerPorts=true;;
+               --profile )             profile=$2; shift;;
+               --topology )            topology=$2; shift;;
+               --genesis-cache-entry ) genesis_cache_entry=$2; shift;;
+               --cache-dir )           cacheDir=$2; shift;;
+               --base-port )           basePort=$2; shift;;
+               --stagger-ports )       staggerPorts=true;;
                -- ) shift; break;;
                --* ) msg "FATAL:  unknown flag '$1'"; usage_run;;
                * ) break;; esac; shift; done
 
         local timestamp=$(date +'%s' --utc)
         local date=$(date +'%Y'-'%m'-'%d'-'%H.%M' --date=@$timestamp --utc)
-        local tag=$date.$batch.$prof
+        local tag=$date.$batch.$profile_name
         local dir=$global_rundir/$tag
         local realdir=$(realpath --canonicalize-missing "$dir")
 
-        if test "$(dirname "$realdir")" != "$(realpath "$global_rundir")"
-        then fatal "bad tag/run dir:  $tag @ $dir"; fi
-
-        if test -e "$dir"
-        then fatal "tag busy:  $tag @ $dir"; fi
-
-        if ! profile has-profile          "$prof"
-        then fatal      "no such profile:  $prof"; fi
-
+        test "$(dirname "$realdir")" = "$(realpath "$global_rundir")" ||
+            fatal "profile | allocate bad tag/run dir:  $tag @ $dir"
+        test ! -e "$dir" ||
+            fatal "profile | allocate tag busy:  $tag @ $dir"
         mkdir -p "$cacheDir" && test -w "$cacheDir" ||
-            fatal "failed to create writable cache directory:  $cacheDir"
-
+            fatal "profile | allocate failed to create writable cache directory:  $cacheDir"
         mkdir -p "$dir" && test -w "$dir" ||
-            fatal "failed to create writable run directory:  $dir"
+            fatal "profile | allocate failed to create writable run directory:  $dir"
+
+        if test -n "$profile"
+        then
+            test "$(jq -r .name $profile/profile.json)" = "$profile_name" ||
+                fatal "profile | allocate incoherence:  --profile $profile/profile.json mismatches '$profile_name'"
+            cp    "$profile"/profile.json          "$dir"/profile.json
+        else
+            profile has-profile          "$profile_name" ||
+                fatal  "no such profile:  $profile_name"
+            profile json-by-name         "$profile_name" > "$dir"/profile.json
+        fi
 
         local args=(
             --null-input
@@ -284,8 +291,7 @@ case "$op" in
         backend record-extended-env-config "$global_envjson" "$@"
         cp "$global_envjson" "$dir"/env.json
 
-        profile get "$prof" > "$dir"/profile.json
-        profile node-specs    "$dir"/profile.json "$global_envjson" > "$dir"/node-specs.json
+        profile node-specs "$dir"/profile.json "$global_envjson" > "$dir"/node-specs.json
 
         ## TODO:  AWS
         local node_commit_desc=$(git_repo_commit_description '.')
@@ -293,7 +299,7 @@ case "$op" in
         local args=(
             --arg       tag              "$tag"
             --arg       batch            "$batch"
-            --arg       profile          "$prof"
+            --arg       profile_name     "$profile_name"
             --argjson   timestamp        "$timestamp"
             --arg       date             "$date"
             --arg       node_commit_desc "$node_commit_desc"
@@ -303,7 +309,7 @@ case "$op" in
            { meta:
              { tag:              $tag
              , batch:            $batch
-             , profile:          $profile
+             , profile:          $profile_name
              , timestamp:        $timestamp
              , date:             $date
              , node_commit_desc: $node_commit_desc
@@ -314,13 +320,10 @@ case "$op" in
 
         topology make    "$dir"/profile.json "$dir"/topology
 
-        local cacheDir=$(jq -r .cacheDir "$global_envjson")
-        test "$cacheDir" != 'null' -a -d "$cacheDir" ||
-            fatal "invalid global env JSON"
-
         local genesis_args=(
             ## Positionals:
-            "$cacheDir"/genesis "$dir"/profile.json
+            "$cacheDir"/genesis
+            "$dir"/profile.json
             "$dir"/topology
             "$dir"/genesis
         )

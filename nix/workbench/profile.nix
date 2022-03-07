@@ -29,7 +29,8 @@ pkgs.runCommand "workbench-profile-output-${profileNix.name}"
   }
   ''
   mkdir $out
-  cp    ${backendProfile}/*  $out
+  cp    ${profileNix.JSON}         $out/profile.json
+  cp    ${backendProfile}/*        $out
   cp    $nodeServicesPath          $out/node-services.json
   cp    $generatorServicePath      $out/generator-service.json
   ''

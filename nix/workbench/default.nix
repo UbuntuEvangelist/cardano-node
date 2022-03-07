@@ -182,9 +182,9 @@ let
             backend.materialise-profile { inherit profileNix; };
         };
 
-      topology = profile-topology { inherit profileNix; };
+      topology = profile-topology { inherit profileNix profile workbench; };
 
-      genesis = profile-topology-genesis { inherit profileNix topology; };
+      genesis = profile-topology-genesis { inherit profileNix profile topology workbench; };
     in {
       inherit
         profileNix profile
