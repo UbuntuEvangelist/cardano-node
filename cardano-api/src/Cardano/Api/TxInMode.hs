@@ -108,7 +108,6 @@ toConsensusGenTx (TxInMode (ShelleyTx _ tx) AlonzoEraInCardanoMode) =
     tx' = Consensus.mkShelleyTx tx
 
 
-
 -- ----------------------------------------------------------------------------
 -- Transaction validation errors in the context of eras and consensus modes
 --
